@@ -21,18 +21,14 @@
 # SOFTWARE.
 
 # Author: Hongrui Zheng
-# Last Modified: 10/12/2022
+# Last Modified: 10/18/2022
 # RBFLayer implemented in JAX/FLAX
 
 from typing import Callable
-import flax
 import jax
 import jax.numpy as jnp
-import numpy as np
-import optax
 from flax import linen as nn
-from flax.metrics import tensorboard
-from flax.training import train_state
+
 
 # RBF kernel functions
 @jax.jit
@@ -105,8 +101,19 @@ def matern52(alpha):
     return phi
 
 
-class RBF(nn.Module):
+class RBFNet(nn.Module):
+    """
+    RBF Network, defined by a layer of RBF kernels and a linear layer
+
+    Args:
+        in_features (int): number of features in the input vector
+        out_features (int): number of features in the output vector
+        num_kernels (int): number of kernels in RBF layer
+        basis_func (Callable): radial basis function to use
+    """
+
     in_features: int
+    out_features: int
     num_kernels: int
     basis_func: Callable
 
@@ -121,28 +128,31 @@ class RBF(nn.Module):
             nn.initializers.constant(0.0),
             (self.num_kernels,),
         )
+        self.linear = nn.Dense(self.out_features)
 
     def __call__(self, x):
+        """
+        Forward,
+
+        Args:
+            x (input vector, jnp.DeviceArray (batch_size, in_features))
+        """
         batch_size = x.shape[0]
 
+        # expand centers to (batch_size, num_kernels, in_features)
+        c = jnp.broadcast_to(
+            self.centers, (batch_size, self.num_kernels, self.in_features)
+        )
 
-class RBF(nn.Module)
-    def __init__(self, in_features, out_features, basis_func):
-        super(RBF, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.centres = nn.Parameter(torch.Tensor(out_features, in_features))
-        self.log_sigmas = nn.Parameter(torch.Tensor(out_features))
-        self.basis_func = basis_func
-        self.reset_parameters()
+        # distances to center
+        d = ((((x - c) ** 2).sum(-1)) ** 0.5) / jnp.broadcast_to(
+            jnp.exp(self.log_sigs), (batch_size, self.num_kernels)
+        )
 
-    def reset_parameters(self):
-        nn.init.normal_(self.centres, 0, 1)
-        nn.init.constant_(self.log_sigmas, 0)
+        # output of rbfs
+        rbf_out = self.basis_func(d)
 
-    def forward(self, input):
-        size = (input.size(0), self.out_features, self.in_features)
-        x = input.unsqueeze(1).expand(size)
-        c = self.centres.unsqueeze(0).expand(size)
-        distances = (x - c).pow(2).sum(-1).pow(0.5) / torch.exp(self.log_sigmas).unsqueeze(0)
-        return self.basis_func(distances)
+        # output of network
+        out = self.linear(rbf_out)
+
+        return out
