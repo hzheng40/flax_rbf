@@ -26,60 +26,17 @@
 # https://github.com/JeremyLinux/PyTorch-Radial-Basis-Function-Layer/blob/master/Torch%20RBF/classification_demo.py
 
 from flax_rbf import RBFNet
-from flax.metrics import tensorboard
+from flax_rbf import gaussian
+# from flax.metrics import tensorboard
 from flax.training import train_state
 import optax
 import jax.numpy as jnp
 import jax
 import matplotlib.pyplot as plt
 
-
-class Network(nn.Module):
-    
-    def __init__(self, layer_widths, layer_centres, basis_func):
-        super(Network, self).__init__()
-        self.rbf_layers = nn.ModuleList()
-        self.linear_layers = nn.ModuleList()
-        for i in range(len(layer_widths) - 1):
-            self.rbf_layers.append(rbf.RBF(layer_widths[i], layer_centres[i], basis_func))
-            self.linear_layers.append(nn.Linear(layer_centres[i], layer_widths[i+1]))
-    
-    def forward(self, x):
-        out = x
-        for i in range(len(self.rbf_layers)):
-            out = self.rbf_layers[i](out)
-            out = self.linear_layers[i](out)
-        return out
-    
-    def fit(self, x, y, epochs, batch_size, lr, loss_func):
-        self.train()
-        obs = x.size(0)
-        trainset = MyDataset(x, y)
-        trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-        optimiser = torch.optim.Adam(self.parameters(), lr=lr)
-        epoch = 0
-        while epoch < epochs:
-            epoch += 1
-            current_loss = 0
-            batches = 0
-            progress = 0
-            for x_batch, y_batch in trainloader:
-                batches += 1
-                optimiser.zero_grad()
-                y_hat = self.forward(x_batch)
-                loss = loss_func(y_hat, y_batch)
-                current_loss += (1/batches) * (loss.item() - current_loss)
-                loss.backward()
-                optimiser.step()
-                progress += y_batch.size(0)
-                sys.stdout.write('\rEpoch: %d, Progress: %d/%d, Loss: %f      ' % \
-                                 (epoch, progress, obs, current_loss))
-                sys.stdout.flush()
-
-
 # rng
 key = jax.random.PRNGKey(0)
-k1, k2 = jax.random.split(key)
+k1, k2, k3 = jax.random.split(key, num=3)
 
 # GT decision boundary
 x_gt = jnp.linspace(-1, 1, 101)
@@ -87,17 +44,15 @@ val_gt = 0.5*jnp.cos(jnp.pi*x_gt) + 0.5*jnp.cos(4*jnp.pi*(x_gt+1))
 
 # random samples as training set
 samples = 200
-x1 = jax.random.uniform(k1, (samples, 1), minval=-1, maxval=1)
+x1 = jax.random.uniform(k1, (samples, 1), minval=-1., maxval=1.)
+x2_1 = jax.random.uniform(k2, (samples//2, 1), minval=-1., maxval=0.5*jnp.cos(jnp.pi*x1[:samples//2])+0.5*jnp.cos(4*jnp.pi*(x1[:samples//2]+1)))
+x2_2 = jax.random.uniform(k3, (samples//2, 1), minval=0.5*jnp.cos(jnp.pi*x1[:samples//2])+0.5*jnp.cos(4*jnp.pi*(x1[:samples//2]+1)), maxval=1.)
 
+# training set
+tx = jnp.hstack((x1, jnp.vstack((x2_1, x2_2))))
+ty = jnp.vstack((jnp.zeros((samples//2, 1)), jnp.ones((samples//2, 1))))
 
-
-
-for i in range(samples):
-    if i < samples//2:
-        x[i,1] = np.random.uniform(-1, 0.5*np.cos(np.pi*x[i,0]) + 0.5*np.cos(4*np.pi*(x[i,0]+1)))
-    else:
-        x[i,1] = np.random.uniform(0.5*np.cos(np.pi*x[i,0]) + 0.5*np.cos(4*np.pi*(x[i,0]+1)), 1)
-
+# gridding for plotting
 steps = 100
 x_span = jnp.linspace(-1, 1, steps)
 y_span = jnp.linspace(-1, 1, steps)
@@ -106,21 +61,19 @@ values = jnp.append(xx.ravel().reshape(xx.ravel().shape[0], 1),
                     yy.ravel().reshape(yy.ravel().shape[0], 1),
                     axis=1)
 
-tx = torch.from_numpy(x).float()
-ty = torch.cat((torch.zeros(samples//2,1), torch.ones(samples//2,1)), dim=0)
-
-
+# create train state
+rng = jax.random.PRNGKey(1)
+rng, init_rng = jax.random.split(rng)
 
 # Instanciating and training an RBF network with the Gaussian basis function
 # This network receives a 2-dimensional input, transforms it into a 40-dimensional
 # hidden representation with an RBF layer and then transforms that into a
 # 1-dimensional output/prediction with a linear layer
+rbf_net = RBFNet(in_features=2, out_features=1, num_kernels=40, basis_func=gaussian)
+params = rbf_net.init(init_rng, jnp.ones((10, 2)))
+optim = optax.adam(0.01)
+tstate = train_state.TrainState.create(apply_fn=rbf_net.apply, params=params, tx=optim)
 
-# To add more layers, change the layer_widths and layer_centres lists
-
-layer_widths = [2, 1]
-layer_centres = [40]
-basis_func = rbf.gaussian
 
 rbfnet = Network(layer_widths, layer_centres, basis_func)
 rbfnet.fit(tx, ty, 5000, samples, 0.01, nn.BCEWithLogitsLoss())

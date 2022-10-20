@@ -33,13 +33,13 @@ from flax import linen as nn
 # RBF kernel functions
 @jax.jit
 def gaussian(alpha):
-    phi = jnp.exp(-1 * alpha.pow(2))
-
+    phi = jnp.exp(-1 * alpha**2)
+    return phi
 
 @jax.jit
 def inverse_quadratic(alpha):
-    phi = jnp.ones_like(alpha) / (jnp.ones_like(alpha) + alpha.pow(2))
-
+    phi = jnp.ones_like(alpha) / (jnp.ones_like(alpha) + alpha**2)
+    return phi
 
 @jax.jit
 def linear(alpha):
@@ -49,25 +49,25 @@ def linear(alpha):
 
 @jax.jit
 def quadratic(alpha):
-    phi = alpha.pow(2)
+    phi = alpha**2
     return phi
 
 
 @jax.jit
 def multiquadric(alpha):
-    phi = (jnp.ones_like(alpha) + alpha.pow(2)).pow(0.5)
+    phi = (jnp.ones_like(alpha) + alpha**2)**0.5
     return phi
 
 
 @jax.jit
 def inverse_multiquadric(alpha):
-    phi = jnp.ones_like(alpha) / (jnp.ones_like(alpha) + alpha.pow(2)).pow(0.5)
+    phi = jnp.ones_like(alpha) / (jnp.ones_like(alpha) + alpha**2)**0.5
     return phi
 
 
 @jax.jit
 def spline(alpha):
-    phi = alpha.pow(2) * jnp.log(alpha + jnp.ones_like(alpha))
+    phi = alpha**2 * jnp.log(alpha + jnp.ones_like(alpha))
     return phi
 
 
@@ -95,7 +95,7 @@ def matern32(alpha):
 
 @jax.jit
 def matern52(alpha):
-    phi = (jnp.ones_like(alpha) + 5**0.5 * alpha + (5 / 3) * alpha.pow(2)) * jnp.exp(
+    phi = (jnp.ones_like(alpha) + 5**0.5 * alpha + (5 / 3) * alpha**2) * jnp.exp(
         -(5**0.5) * alpha
     )
     return phi
@@ -144,14 +144,19 @@ class RBFNet(nn.Module):
             self.centers, (batch_size, self.num_kernels, self.in_features)
         )
 
+        # expand input to (batch_size, num_kernels, in_features)
+        x_e = jnp.broadcast_to(
+            jnp.expand_dims(x, axis=1), (batch_size, self.num_kernels, self.in_features)
+        )
+
         # distances to center
-        d = ((((x - c) ** 2).sum(-1)) ** 0.5) / jnp.broadcast_to(
+        d = ((((x_e - c) ** 2).sum(-1)) ** 0.5) / jnp.broadcast_to(
             jnp.exp(self.log_sigs), (batch_size, self.num_kernels)
         )
 
         # output of rbfs
         rbf_out = self.basis_func(d)
-
+        
         # output of network
         out = self.linear(rbf_out)
 
