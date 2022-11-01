@@ -161,3 +161,59 @@ class RBFNet(nn.Module):
         out = self.linear(rbf_out)
 
         return out
+
+
+class RBFLayer(nn.Module):
+    """
+    RBF Layer, defined by a layer of RBF kernels
+
+    Args:
+        in_features (int): number of features in the input vector
+        num_kernels (int): number of kernels in RBF layer
+        basis_func (Callable): radial basis function to use
+    """
+
+    in_features: int
+    num_kernels: int
+    basis_func: Callable
+
+    def setup(self):
+        self.centers = self.param(
+            "centers",
+            nn.initializers.normal(1.0),
+            (self.num_kernels, self.in_features),
+        )
+        self.log_sigs = self.param(
+            "log_sigs",
+            nn.initializers.constant(0.0),
+            (self.num_kernels,),
+        )
+
+    def __call__(self, x):
+        """
+        Forward,
+
+        Args:
+            x (input vector, jnp.DeviceArray (batch_size, in_features))
+        """
+        batch_size = x.shape[0]
+
+        # expand centers to (batch_size, num_kernels, in_features)
+        c = jnp.broadcast_to(
+            self.centers, (batch_size, self.num_kernels, self.in_features)
+        )
+
+        # expand input to (batch_size, num_kernels, in_features)
+        x_e = jnp.broadcast_to(
+            jnp.expand_dims(x, axis=1), (batch_size, self.num_kernels, self.in_features)
+        )
+
+        # distances to center
+        d = ((((x_e - c) ** 2).sum(-1)) ** 0.5) / jnp.broadcast_to(
+            jnp.exp(self.log_sigs), (batch_size, self.num_kernels)
+        )
+
+        # output of rbfs
+        rbf_out = self.basis_func(d)
+
+        return rbf_out
