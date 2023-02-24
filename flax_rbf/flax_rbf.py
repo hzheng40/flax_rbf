@@ -37,6 +37,16 @@ def gaussian(alpha):
     return phi
 
 @jax.jit
+def gaussian_wide(alpha):
+    phi = jnp.exp(-0.1 * alpha**2)
+    return phi
+
+@jax.jit
+def gaussian_wider(alpha):
+    phi = jnp.exp(-0.01 * alpha**2)
+    return phi
+
+@jax.jit
 def inverse_quadratic(alpha):
     phi = jnp.ones_like(alpha) / (jnp.ones_like(alpha) + alpha**2)
     return phi
