@@ -5,14 +5,13 @@
 ## Dependencies
 To install, run:
 ```bash
-cd flax_rbf
 virtualenv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Examples
-See a classification demo in ```flax_rbf/classification.py```.
+See a classification demo in ```src/flax_rbf/classification.py```.
 
 <p align="center">
   <img src="classification.png">

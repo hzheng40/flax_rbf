@@ -1,0 +1,17 @@
+[project]
+name = "flax_rbf"
+authors = [{name = "Hongrui Zheng", email = "hongruiz@seas.upenn.edu"}]
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "jax[cuda12]",
+    "chex",
+    "flax",
+    "optax",
+    "scipy",
+    "matplotlib"
+]
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
